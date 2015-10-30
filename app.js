@@ -1,13 +1,15 @@
 var express = require('express');
 var path = require('path');
-var favicon = require('serve-favicon');
 var logger = require('morgan');
 var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
 var passport = require('passport');
 var expressSession = require('express-session');
+
 var SkautISStrategy = require('./../passport-skautis/lib').Strategy;
 var skautisApplicationId = "44c67992-0d03-4755-8622-26756a84653e";
+var SkautIS = require('./../node-skautis/lib');
+var skautis = new SkautIS(skautisApplicationId, true);
 
 var app = express();
 
@@ -15,8 +17,6 @@ var app = express();
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'jade');
 
-// uncomment after placing your favicon in /public
-//app.use(favicon(path.join(__dirname, 'public', 'favicon.ico')));
 app.use(logger('dev'));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -26,8 +26,8 @@ app.use(passport.initialize());
 app.use(passport.session());
 app.use(express.static(path.join(__dirname, 'public')));
 
-require('./routes/index')(app, passport);
-//app.use('/', routes)(app, passport);
+
+// SkautIS passport use
 
 passport.use(new SkautISStrategy({
     applicationId: skautisApplicationId,
@@ -48,7 +48,58 @@ passport.deserializeUser(function(user, done) {
   done(null, user);
 });
 
-// catch 404 and forward to error handler
+// helper function
+
+function isLoggedIn(req, res, next) {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  res.redirect('/login');
+}
+
+app.get('/', function(req, res, next) {
+
+  var title = "Nepřihlášen";
+
+  if (req.isAuthenticated()) {
+    title = "Přihlášen";
+  }
+
+  if(req.isAuthenticated()) {
+    var items = [];
+    console.dir(req.user);
+    skautis.setToken(req.user.token);
+    skautis.UserManagement.UserDetail(req.user.token, null, function(err, data) {
+      if(!err) {
+        for(var key in data) {
+          items.push(key + ": " + data[key]);
+        }
+      }
+      res.render('index', { title: title, items: items });
+    });
+  }
+  else {
+    res.render('index', { title: title, items: [] });
+  }
+});
+
+app.get('/login', passport.authenticate('skautis'));
+
+app.get('/safe', isLoggedIn, function(req, res) {
+  res.render('index', { title: "Safe", items: []});
+});
+
+app.get('/logout', function(req, res) {
+  req.logout();
+  res.redirect('/');
+});
+
+app.post('/token',passport.authenticate('skautis'), function(req, res, next) {
+  res.redirect('/');
+});
+
+// 404
+
 app.use(function(req, res, next) {
   var err = new Error('Not Found');
   err.status = 404;
@@ -57,8 +108,6 @@ app.use(function(req, res, next) {
 
 // error handlers
 
-// development error handler
-// will print stacktrace
 if (app.get('env') === 'development') {
   app.use(function(err, req, res, next) {
     res.status(err.status || 500);
@@ -69,8 +118,6 @@ if (app.get('env') === 'development') {
   });
 }
 
-// production error handler
-// no stacktraces leaked to user
 app.use(function(err, req, res, next) {
   res.status(err.status || 500);
   res.render('error', {
@@ -78,6 +125,6 @@ app.use(function(err, req, res, next) {
     error: {}
   });
 });
-
+*/
 
 module.exports = app;
